@@ -1,0 +1,14 @@
+fastapi
+uvicorn[standard]
+SQLAlchemy==1.4
+asyncpg
+pydantic
+python-jose
+passlib[bcrypt]
+aioredis
+httpx
+scipy
+numpy
+psycopg2-binary
+stripe
+python-dotenv
