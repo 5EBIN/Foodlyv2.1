@@ -13,17 +13,48 @@ class User(Base):
     User table - stores both customers and agents
     """
     __tablename__ = "users"
-    
+
     id = Column(Integer, primary_key=True, index=True)
-    email = Column(String(255), unique=True, nullable=False, index=True)
+    username = Column(String(255), unique=True, nullable=False, index=True)
+    email = Column(String(255), unique=True, nullable=True, index=True)  # Made optional
     hashed_password = Column(String(255), nullable=False)
     is_active = Column(Boolean, default=True)
     is_agent = Column(Boolean, default=False, index=True)
+
+    # Customer profile fields
+    phone = Column(String(50), nullable=True)
+    address = Column(Text, nullable=True)
+    lat = Column(Float, nullable=True)
+    lng = Column(Float, nullable=True)
+
     created_at = Column(DateTime, server_default=func.now())
-    
+
     # Relationships
     orders = relationship("Order", back_populates="user", foreign_keys="Order.user_id")
     agent_profile = relationship("Agent", back_populates="user", uselist=False)
+    customer_orders = relationship("CustomerOrder", back_populates="customer", foreign_keys="CustomerOrder.customer_id")
+
+class Restaurant(Base):
+    """
+    Restaurant table - stores restaurant information
+    """
+    __tablename__ = "restaurants"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(255), nullable=False)
+    cuisine_type = Column(String(100), nullable=True)
+    address = Column(Text, nullable=False)
+    lat = Column(Float, nullable=False, index=True)
+    lng = Column(Float, nullable=False, index=True)
+    is_active = Column(Boolean, default=True, index=True)
+    operating_hours = Column(JSON, nullable=True)  # {"monday": {"open": "09:00", "close": "22:00"}, ...}
+    image_url = Column(String(500), nullable=True)
+    rating = Column(Float, default=4.0)
+    delivery_time = Column(Integer, default=30)  # minutes
+    created_at = Column(DateTime, server_default=func.now())
+
+    # Relationships
+    customer_orders = relationship("CustomerOrder", back_populates="restaurant")
 
 class Order(Base):
     """
@@ -167,8 +198,50 @@ class Notification(Base):
     
     created_at = Column(DateTime, server_default=func.now(), index=True)
 
+class CustomerOrder(Base):
+    """
+    CustomerOrder table - food delivery orders from restaurants
+    This is the main order type for the customer-facing app
+    """
+    __tablename__ = "customer_orders"
+
+    id = Column(Integer, primary_key=True, index=True)
+    customer_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    restaurant_id = Column(Integer, ForeignKey("restaurants.id"), nullable=False, index=True)
+    assigned_agent_id = Column(Integer, ForeignKey("agents.id"), nullable=True, index=True)
+
+    # Order details
+    amount = Column(Float, nullable=False)
+    delivery_address = Column(Text, nullable=False)
+    delivery_lat = Column(Float, nullable=False)
+    delivery_lng = Column(Float, nullable=False)
+
+    # Status: pending, assigned, picked_up, in_transit, delivered, cancelled
+    status = Column(String(50), default="pending", index=True)
+
+    # Timestamps
+    created_at = Column(DateTime, server_default=func.now(), index=True)
+    assigned_at = Column(DateTime, nullable=True)
+    picked_up_at = Column(DateTime, nullable=True)
+    delivered_at = Column(DateTime, nullable=True)
+
+    # Payment
+    payment_status = Column(String(50), default="pending")  # pending, completed, failed
+    payment_method = Column(String(50), default="mock")  # mock, card, cash
+
+    # ML assignment scores (for tracking)
+    assignment_score = Column(Float, nullable=True)  # G-value or matching score
+
+    # Relationships
+    customer = relationship("User", back_populates="customer_orders", foreign_keys=[customer_id])
+    restaurant = relationship("Restaurant", back_populates="customer_orders")
+    agent = relationship("Agent", foreign_keys=[assigned_agent_id])
+
 # Create indexes for better query performance
 Index('idx_orders_status_agent', Order.status, Order.assigned_agent_id)
 Index('idx_orders_user_status', Order.user_id, Order.status)
 Index('idx_earnings_agent_timestamp', Earning.agent_id, Earning.timestamp)
 Index('idx_payments_order_status', Payment.order_id, Payment.status)
+Index('idx_customer_orders_status', CustomerOrder.status)
+Index('idx_customer_orders_customer', CustomerOrder.customer_id, CustomerOrder.status)
+Index('idx_customer_orders_agent', CustomerOrder.assigned_agent_id, CustomerOrder.status)

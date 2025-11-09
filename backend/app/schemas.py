@@ -13,23 +13,25 @@ from datetime import datetime
 
 class UserCreate(BaseModel):
     """Schema for user registration"""
-    email: EmailStr
+    username: str = Field(..., min_length=3, max_length=50)
     password: str = Field(..., min_length=6)
+    email: Optional[str] = None
     is_agent: bool = False
 
 class UserLogin(BaseModel):
     """Schema for user login"""
-    email: EmailStr
+    username: str
     password: str
 
 class UserOut(BaseModel):
     """Schema for user response"""
     id: int
-    email: str
+    username: str
+    email: Optional[str]
     is_active: bool
     is_agent: bool
     created_at: datetime
-    
+
     class Config:
         from_attributes = True
 
@@ -37,6 +39,7 @@ class Token(BaseModel):
     """Schema for JWT token response"""
     access_token: str
     token_type: str
+    user_type: Optional[str] = None
 
 class TokenData(BaseModel):
     """Schema for decoded token data"""
@@ -179,6 +182,83 @@ class NotificationOut(BaseModel):
     read: bool
     order_id: Optional[int]
     created_at: datetime
-    
+
     class Config:
         from_attributes = True
+
+# ============================================
+# Restaurant Schemas
+# ============================================
+
+class RestaurantCreate(BaseModel):
+    """Schema for creating a restaurant (admin only)"""
+    name: str = Field(..., min_length=1, max_length=255)
+    cuisine_type: Optional[str] = None
+    address: str
+    lat: float = Field(..., ge=-90, le=90)
+    lng: float = Field(..., ge=-180, le=180)
+    operating_hours: Optional[dict] = None
+    image_url: Optional[str] = None
+    rating: Optional[float] = Field(default=4.0, ge=0, le=5)
+    delivery_time: Optional[int] = Field(default=30, gt=0)
+
+class RestaurantOut(BaseModel):
+    """Schema for restaurant response"""
+    id: int
+    name: str
+    cuisine_type: Optional[str]
+    address: str
+    lat: float
+    lng: float
+    is_active: bool
+    operating_hours: Optional[dict]
+    image_url: Optional[str]
+    rating: float
+    delivery_time: int
+    created_at: datetime
+    distance: Optional[float] = None  # Calculated field for distance from user
+
+    class Config:
+        from_attributes = True
+
+# ============================================
+# Customer Order Schemas
+# ============================================
+
+class CustomerOrderCreate(BaseModel):
+    """Schema for creating a customer order"""
+    restaurant_id: int
+    amount: float = Field(..., gt=0)
+    delivery_address: str
+    delivery_lat: float = Field(..., ge=-90, le=90)
+    delivery_lng: float = Field(..., ge=-180, le=180)
+
+class CustomerOrderOut(BaseModel):
+    """Schema for customer order response"""
+    id: int
+    customer_id: int
+    restaurant_id: int
+    assigned_agent_id: Optional[int]
+    amount: float
+    delivery_address: str
+    delivery_lat: float
+    delivery_lng: float
+    status: str
+    payment_status: str
+    payment_method: str
+    assignment_score: Optional[float]
+    created_at: datetime
+    assigned_at: Optional[datetime]
+    picked_up_at: Optional[datetime]
+    delivered_at: Optional[datetime]
+
+    # Nested objects (optional, populate on demand)
+    restaurant: Optional[RestaurantOut] = None
+
+    class Config:
+        from_attributes = True
+
+class CustomerOrderWithDetails(CustomerOrderOut):
+    """Extended customer order with full details"""
+    restaurant: RestaurantOut
+    agent_name: Optional[str] = None

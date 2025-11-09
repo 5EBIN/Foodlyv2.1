@@ -74,6 +74,12 @@ async def health_check():
 # Include routers
 app.include_router(auth.router, prefix="/api")
 
+# Import and include new routers
+from app.routers import restaurants, customer_orders
+
+app.include_router(restaurants.router, prefix="/api")
+app.include_router(customer_orders.router, prefix="/api")
+
 # You can add more routers here:
 # from app.routers import orders, agents, payments
 # app.include_router(orders.router, prefix="/api")
