@@ -39,7 +39,7 @@ apiClient.interceptors.response.use(
 export const apiService = {
   async login(credentials: { email: string; password: string }) {
     const response = await apiClient.post('/auth/login', credentials);
-    const { token } = response.data;
+    const token = response.data.access_token || response.data.token;
     await AsyncStorage.setItem('auth_token', token);
     return response.data;
   },

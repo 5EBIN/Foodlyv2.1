@@ -1,14 +1,48 @@
-fastapi
-uvicorn[standard]
-SQLAlchemy==1.4
-asyncpg
-pydantic
-python-jose
-passlib[bcrypt]
-aioredis
-httpx
+# FastAPI and server
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+python-multipart==0.0.6
+
+# Database
+sqlalchemy==1.4.53
+alembic==1.12.1
+
+# For PostgreSQL (optional)
+asyncpg==0.29.0
+psycopg2-binary==2.9.9
+
+# Authentication
+passlib[bcrypt]==1.7.4
+python-jose[cryptography]==3.3.0
+bcrypt==4.1.1
+
+# Validation
+pydantic==2.5.0
+pydantic-settings==2.1.0
+email-validator==2.1.0
+
+# Payment processing
+stripe==7.7.0
+
+# Google Maps (for distance calculation)
+googlemaps==4.10.0
+
+# WebSockets (for real-time updates)
+websockets==12.0
+
+# Environment variables
+python-dotenv==1.0.0
+
+# CORS
+starlette==0.27.0
+
+# Testing
+pytest==7.4.3
+pytest-asyncio==0.21.1
+httpx==0.25.2
+
+# Additional dependencies
 scipy
 numpy
-psycopg2-binary
-stripe
-python-dotenv
+aioredis
+httpx

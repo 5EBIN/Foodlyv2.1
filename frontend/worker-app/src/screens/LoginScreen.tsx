@@ -11,10 +11,12 @@ import {
   ActivityIndicator,
   Alert,
 } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
 import { useMutation } from '@tanstack/react-query';
 import { apiService } from '../services/api';
 
-export default function LoginScreen({ navigation }: any) {
+export default function LoginScreen() {
+  const navigation = useNavigation();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
 
@@ -22,7 +24,8 @@ export default function LoginScreen({ navigation }: any) {
     mutationFn: (credentials: { email: string; password: string }) =>
       apiService.login(credentials),
     onSuccess: () => {
-      navigation.replace('Main');
+      // @ts-ignore - navigation type from stack navigator
+      navigation.navigate('Main');
     },
     onError: (error: any) => {
       Alert.alert('Login Failed', error.message || 'Please try again');

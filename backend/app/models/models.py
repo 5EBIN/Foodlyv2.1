@@ -1,57 +1,174 @@
-from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, ForeignKey, JSON
-from sqlalchemy.orm import relationship
+"""
+Complete Database Models
+File: backend/app/models/models.py
+All tables with proper relationships and indexes
+"""
+from sqlalchemy import Column, Integer, String, Float, Boolean, ForeignKey, DateTime, JSON, Text, Index
 from sqlalchemy.sql import func
-
+from sqlalchemy.orm import relationship
 from app.models.database import Base
 
 class User(Base):
+    """
+    User table - stores both customers and agents
+    """
     __tablename__ = "users"
+    
     id = Column(Integer, primary_key=True, index=True)
-    email = Column(String, unique=True, index=True, nullable=False)
-    hashed_password = Column(String, nullable=False)
+    email = Column(String(255), unique=True, nullable=False, index=True)
+    hashed_password = Column(String(255), nullable=False)
     is_active = Column(Boolean, default=True)
-    is_agent = Column(Boolean, default=False)  # driver or consumer
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-
-    orders = relationship("Order", back_populates="user")
+    is_agent = Column(Boolean, default=False, index=True)
+    created_at = Column(DateTime, server_default=func.now())
+    
+    # Relationships
+    orders = relationship("Order", back_populates="user", foreign_keys="Order.user_id")
+    agent_profile = relationship("Agent", back_populates="user", uselist=False)
 
 class Order(Base):
+    """
+    Order table - delivery orders
+    """
     __tablename__ = "orders"
+    
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"))
-    pickup_lat = Column(Float)
-    pickup_lng = Column(Float)
-    drop_lat = Column(Float)
-    drop_lng = Column(Float)
-    status = Column(String, default="pending")  # pending, assigned, delivered
-    assigned_agent_id = Column(Integer, nullable=True)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-
-    user = relationship("User", back_populates="orders")
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    
+    # Location coordinates
+    pickup_lat = Column(Float, nullable=False)
+    pickup_lng = Column(Float, nullable=False)
+    drop_lat = Column(Float, nullable=False)
+    drop_lng = Column(Float, nullable=False)
+    
+    # Optional address details
+    pickup_address = Column(Text, nullable=True)
+    drop_address = Column(Text, nullable=True)
+    
+    # Order status: pending, assigned, picked_up, in_transit, delivered, cancelled
+    status = Column(String(50), default="pending", index=True)
+    
+    # Agent assignment
+    assigned_agent_id = Column(Integer, ForeignKey("agents.id"), nullable=True, index=True)
+    
+    # Pricing
+    estimated_price = Column(Float, nullable=True)
+    final_price = Column(Float, nullable=True)
+    
+    # Timestamps
+    created_at = Column(DateTime, server_default=func.now())
+    assigned_at = Column(DateTime, nullable=True)
+    picked_up_at = Column(DateTime, nullable=True)
+    delivered_at = Column(DateTime, nullable=True)
+    
+    # Relationships
+    user = relationship("User", back_populates="orders", foreign_keys=[user_id])
+    agent = relationship("Agent", back_populates="assigned_orders", foreign_keys=[assigned_agent_id])
+    payment = relationship("Payment", back_populates="order", uselist=False)
 
 class Agent(Base):
+    """
+    Agent table - delivery agents
+    """
     __tablename__ = "agents"
+    
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), unique=True)
-    active = Column(Boolean, default=True)
-    current_work_seconds = Column(Float, default=0.0)  # Wv
-    active_seconds = Column(Float, default=0.0)        # Av
-    last_location = Column(JSON, nullable=True)        # {"lat":.., "lng":..}
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    user_id = Column(Integer, ForeignKey("users.id"), unique=True, nullable=False, index=True)
+    
+    # Agent status
+    active = Column(Boolean, default=True, index=True)
+    online = Column(Boolean, default=False)
+    
+    # Work tracking (in seconds)
+    current_work_seconds = Column(Float, default=0.0)
+    active_seconds = Column(Float, default=0.0)
+    total_deliveries = Column(Integer, default=0)
+    
+    # Location tracking
+    last_location = Column(JSON, nullable=True)  # {"lat": 40.7, "lng": -74.0, "timestamp": "..."}
+    
+    # Ratings
+    rating = Column(Float, default=5.0)
+    total_ratings = Column(Integer, default=0)
+    
+    # Vehicle info
+    vehicle_type = Column(String(50), nullable=True)  # bike, scooter, car
+    vehicle_number = Column(String(50), nullable=True)
+    
+    created_at = Column(DateTime, server_default=func.now())
+    last_active_at = Column(DateTime, nullable=True)
+    
+    # Relationships
+    user = relationship("User", back_populates="agent_profile")
+    assigned_orders = relationship("Order", back_populates="agent", foreign_keys="Order.assigned_agent_id")
+    earnings = relationship("Earning", back_populates="agent")
 
 class Earning(Base):
+    """
+    Earnings table - tracks agent earnings
+    """
     __tablename__ = "earnings"
+    
     id = Column(Integer, primary_key=True, index=True)
-    agent_id = Column(Integer, ForeignKey("agents.id"))
-    amount = Column(Float, default=0.0)
-    timestamp = Column(DateTime(timezone=True), server_default=func.now())
+    agent_id = Column(Integer, ForeignKey("agents.id"), nullable=False, index=True)
+    order_id = Column(Integer, ForeignKey("orders.id"), nullable=True)
+    
+    amount = Column(Float, default=0.0, nullable=False)
+    earning_type = Column(String(50), default="delivery")  # delivery, bonus, tip
+    
+    timestamp = Column(DateTime, server_default=func.now(), index=True)
+    
+    # Relationships
+    agent = relationship("Agent", back_populates="earnings")
 
 class Payment(Base):
+    """
+    Payment table - tracks customer payments
+    """
     __tablename__ = "payments"
+    
     id = Column(Integer, primary_key=True, index=True)
-    order_id = Column(Integer, ForeignKey("orders.id"))
-    stripe_payment_id = Column(String, nullable=True)
-    amount = Column(Float)
-    status = Column(String, default="created")
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    order_id = Column(Integer, ForeignKey("orders.id"), nullable=False, index=True)
+    
+    # Stripe integration
+    stripe_payment_id = Column(String(255), nullable=True, unique=True)
+    stripe_payment_intent = Column(String(255), nullable=True)
+    
+    amount = Column(Float, nullable=False)
+    currency = Column(String(10), default="USD")
+    
+    # Payment status: created, processing, succeeded, failed, refunded
+    status = Column(String(50), default="created", index=True)
+    
+    payment_method = Column(String(50), nullable=True)  # card, cash, wallet
+    
+    created_at = Column(DateTime, server_default=func.now())
+    completed_at = Column(DateTime, nullable=True)
+    
+    # Relationships
+    order = relationship("Order", back_populates="payment")
 
+class Notification(Base):
+    """
+    Notification table - push notifications to users/agents
+    """
+    __tablename__ = "notifications"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    
+    title = Column(String(255), nullable=False)
+    message = Column(Text, nullable=False)
+    notification_type = Column(String(50), default="info")  # info, order_update, payment, alert
+    
+    read = Column(Boolean, default=False, index=True)
+    
+    # Optional order reference
+    order_id = Column(Integer, ForeignKey("orders.id"), nullable=True)
+    
+    created_at = Column(DateTime, server_default=func.now(), index=True)
+
+# Create indexes for better query performance
+Index('idx_orders_status_agent', Order.status, Order.assigned_agent_id)
+Index('idx_orders_user_status', Order.user_id, Order.status)
+Index('idx_earnings_agent_timestamp', Earning.agent_id, Earning.timestamp)
+Index('idx_payments_order_status', Payment.order_id, Payment.status)
