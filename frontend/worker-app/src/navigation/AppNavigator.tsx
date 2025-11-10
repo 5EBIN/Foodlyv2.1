@@ -34,6 +34,8 @@ function AgentTabs() {
             iconName = focused ? 'briefcase' : 'briefcase-outline';
           } else if (route.name === 'Earnings') {
             iconName = focused ? 'wallet' : 'wallet-outline';
+          } else if (route.name === 'Profile') {
+            iconName = focused ? 'person' : 'person-outline';
           } else {
             iconName = 'ellipse';
           }
@@ -58,6 +60,11 @@ function AgentTabs() {
         name="Earnings"
         component={EarningsScreen}
         options={{ title: 'My Earnings' }}
+      />
+      <Tab.Screen
+        name="Profile"
+        component={ProfileScreen}
+        options={{ title: 'Profile' }}
       />
     </Tab.Navigator>
   );

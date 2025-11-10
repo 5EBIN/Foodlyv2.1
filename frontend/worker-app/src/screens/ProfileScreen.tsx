@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -8,9 +8,32 @@ import {
   Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { CommonActions } from '@react-navigation/native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useQueryClient } from '@tanstack/react-query';
 import { apiService } from '../services/api';
 
-export default function ProfileScreen({ navigation }: any) {
+export default function ProfileScreen({ navigation, route }: any) {
+  const [userType, setUserType] = useState<'agent' | 'customer'>('customer');
+  const [username, setUsername] = useState('');
+  const queryClient = useQueryClient();
+
+  useEffect(() => {
+    // Get user type from AsyncStorage
+    const loadUserInfo = async () => {
+      const storedUserType = await AsyncStorage.getItem('user_type');
+      if (storedUserType) {
+        setUserType(storedUserType as 'agent' | 'customer');
+      }
+      // Try to get username from route params or use default
+      const routeUserType = route?.params?.userType;
+      if (routeUserType) {
+        setUserType(routeUserType);
+      }
+    };
+    loadUserInfo();
+  }, []);
+
   const handleLogout = async () => {
     Alert.alert(
       'Logout',
@@ -24,66 +47,146 @@ export default function ProfileScreen({ navigation }: any) {
           text: 'Logout',
           style: 'destructive',
           onPress: async () => {
-            await apiService.logout();
-            navigation.reset({
-              index: 0,
-              routes: [{ name: 'Landing' }],
-            });
+            try {
+              // Clear all auth data
+              await apiService.logout();
+              // Clear any other stored data
+              await AsyncStorage.removeItem('current_job');
+              // Clear React Query cache
+              queryClient.clear();
+              
+              // Navigate to Landing screen - get root navigator
+              let rootNav = navigation;
+              while (rootNav.getParent()) {
+                rootNav = rootNav.getParent();
+              }
+              
+              // Reset navigation stack to Landing screen
+              rootNav.dispatch(
+                CommonActions.reset({
+                  index: 0,
+                  routes: [{ name: 'Landing' }],
+                })
+              );
+            } catch (error) {
+              console.error('Logout error:', error);
+              // Still try to navigate even if logout fails
+              queryClient.clear();
+              let rootNav = navigation;
+              while (rootNav.getParent()) {
+                rootNav = rootNav.getParent();
+              }
+              rootNav.dispatch(
+                CommonActions.reset({
+                  index: 0,
+                  routes: [{ name: 'Landing' }],
+                })
+              );
+            }
           },
         },
       ]
     );
   };
 
+  const isAgent = userType === 'agent';
+
   return (
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
       {/* Profile Header */}
       <View style={styles.header}>
-        <View style={styles.avatarContainer}>
-          <Ionicons name="person" size={64} color="#fff" />
+        <View style={[styles.avatarContainer, isAgent && styles.avatarContainerAgent]}>
+          <Ionicons name={isAgent ? "bicycle" : "person"} size={64} color="#fff" />
         </View>
-        <Text style={styles.userName}>Customer User</Text>
-        <Text style={styles.userEmail}>customer1@example.com</Text>
+        <Text style={styles.userName}>{isAgent ? 'Delivery Agent' : 'Customer User'}</Text>
+        <Text style={styles.userEmail}>{isAgent ? 'agent@work4food.com' : 'customer@work4food.com'}</Text>
+        <View style={styles.roleBadge}>
+          <Text style={styles.roleText}>{isAgent ? 'AGENT' : 'CUSTOMER'}</Text>
+        </View>
       </View>
 
-      {/* Menu Items */}
-      <View style={styles.menuSection}>
-        <Text style={styles.sectionTitle}>Account</Text>
+      {/* Menu Items - Different for Agent vs Customer */}
+      {isAgent ? (
+        <>
+          <View style={styles.menuSection}>
+            <Text style={styles.sectionTitle}>Account</Text>
 
-        <TouchableOpacity style={styles.menuItem}>
-          <Ionicons name="person-outline" size={24} color="#6B7280" />
-          <Text style={styles.menuItemText}>Edit Profile</Text>
-          <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
-        </TouchableOpacity>
+            <TouchableOpacity style={styles.menuItem}>
+              <Ionicons name="person-outline" size={24} color="#6B7280" />
+              <Text style={styles.menuItemText}>Edit Profile</Text>
+              <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
+            </TouchableOpacity>
 
-        <TouchableOpacity style={styles.menuItem}>
-          <Ionicons name="location-outline" size={24} color="#6B7280" />
-          <Text style={styles.menuItemText}>Delivery Addresses</Text>
-          <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
-        </TouchableOpacity>
+            <TouchableOpacity style={styles.menuItem}>
+              <Ionicons name="bicycle-outline" size={24} color="#6B7280" />
+              <Text style={styles.menuItemText}>Vehicle Information</Text>
+              <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
+            </TouchableOpacity>
 
-        <TouchableOpacity style={styles.menuItem}>
-          <Ionicons name="card-outline" size={24} color="#6B7280" />
-          <Text style={styles.menuItemText}>Payment Methods</Text>
-          <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
-        </TouchableOpacity>
-      </View>
+            <TouchableOpacity style={styles.menuItem}>
+              <Ionicons name="location-outline" size={24} color="#6B7280" />
+              <Text style={styles.menuItemText}>Location Settings</Text>
+              <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
+            </TouchableOpacity>
+          </View>
 
-      <View style={styles.menuSection}>
-        <Text style={styles.sectionTitle}>Orders</Text>
+          <View style={styles.menuSection}>
+            <Text style={styles.sectionTitle}>Work</Text>
 
-        <TouchableOpacity style={styles.menuItem}>
-          <Ionicons name="time-outline" size={24} color="#6B7280" />
-          <Text style={styles.menuItemText}>Order History</Text>
-          <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
-        </TouchableOpacity>
+            <TouchableOpacity style={styles.menuItem}>
+              <Ionicons name="time-outline" size={24} color="#6B7280" />
+              <Text style={styles.menuItemText}>Delivery History</Text>
+              <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
+            </TouchableOpacity>
 
-        <TouchableOpacity style={styles.menuItem}>
-          <Ionicons name="heart-outline" size={24} color="#6B7280" />
-          <Text style={styles.menuItemText}>Favorite Restaurants</Text>
-          <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
-        </TouchableOpacity>
-      </View>
+            <TouchableOpacity style={styles.menuItem}>
+              <Ionicons name="stats-chart-outline" size={24} color="#6B7280" />
+              <Text style={styles.menuItemText}>Performance Stats</Text>
+              <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
+            </TouchableOpacity>
+          </View>
+        </>
+      ) : (
+        <>
+          <View style={styles.menuSection}>
+            <Text style={styles.sectionTitle}>Account</Text>
+
+            <TouchableOpacity style={styles.menuItem}>
+              <Ionicons name="person-outline" size={24} color="#6B7280" />
+              <Text style={styles.menuItemText}>Edit Profile</Text>
+              <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.menuItem}>
+              <Ionicons name="location-outline" size={24} color="#6B7280" />
+              <Text style={styles.menuItemText}>Delivery Addresses</Text>
+              <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.menuItem}>
+              <Ionicons name="card-outline" size={24} color="#6B7280" />
+              <Text style={styles.menuItemText}>Payment Methods</Text>
+              <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.menuSection}>
+            <Text style={styles.sectionTitle}>Orders</Text>
+
+            <TouchableOpacity style={styles.menuItem}>
+              <Ionicons name="time-outline" size={24} color="#6B7280" />
+              <Text style={styles.menuItemText}>Order History</Text>
+              <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.menuItem}>
+              <Ionicons name="heart-outline" size={24} color="#6B7280" />
+              <Text style={styles.menuItemText}>Favorite Restaurants</Text>
+              <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
+            </TouchableOpacity>
+          </View>
+        </>
+      )}
 
       <View style={styles.menuSection}>
         <Text style={styles.sectionTitle}>Support</Text>
@@ -149,6 +252,22 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 16,
+  },
+  avatarContainerAgent: {
+    backgroundColor: '#10B981',
+  },
+  roleBadge: {
+    marginTop: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    backgroundColor: '#F3F4F6',
+    borderRadius: 12,
+  },
+  roleText: {
+    fontSize: 12,
+    fontWeight: 'bold',
+    color: '#6B7280',
+    letterSpacing: 1,
   },
   userName: {
     fontSize: 24,

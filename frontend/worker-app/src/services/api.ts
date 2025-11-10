@@ -72,8 +72,18 @@ export const apiService = {
   },
 
   async getEarnings() {
-    const response = await apiClient.get('/earnings');
-    return response.data;
+    // Get summary and history
+    const [summary, history] = await Promise.all([
+      apiClient.get('/earnings').catch(() => ({ data: null })),
+      apiClient.get('/earnings/history').catch(() => ({ data: [] }))
+    ]);
+    
+    // Return history with summary data
+    return (history.data || []).map((earning: any) => ({
+      ...earning,
+      created_at: earning.timestamp,
+      paid_out: true, // All earnings are considered paid
+    }));
   },
 
   // Restaurant APIs
