@@ -1,6 +1,7 @@
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.ext.asyncio import AsyncSession
-from typing import List
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy.orm import Session
+from typing import List, Optional
+from datetime import datetime
 import numpy as np
 from scipy.optimize import linear_sum_assignment
 
@@ -19,20 +20,33 @@ def travel_time_seconds(pick_lat, pick_lng, drop_lat, drop_lng):
     return (abs(dx) + abs(dy)) * 1000  # synthetic
 
 @router.post("/", response_model=OrderOut)
-async def create_order(order_in: OrderCreate, db: AsyncSession = Depends(get_db)):
+def create_order(
+    order_in: OrderCreate,
+    db: Session = Depends(get_db),
+    immediate: bool = Query(False, description="Assign immediately (testing only)"),
+):
+    """
+    Create an order. By default, set to pending for batch assignment.
+    If immediate=true, keep legacy immediate assignment flow via batch endpoint.
+    """
     order = models.Order(
+        user_id=0,  # optional placeholder if not using users here
         pickup_lat=order_in.pickup_lat,
         pickup_lng=order_in.pickup_lng,
-        drop_lat=order_in.drop_lat,
-        drop_lng=order_in.drop_lng
+        drop_lat=order_in.drop_lng if hasattr(order_in, "drop_lng") else order_in.drop_lat,
+        drop_lng=order_in.drop_lng,
+        status="pending",
+        batch_window_start=datetime.utcnow(),
+        estimated_work_hours=0.0,
     )
     db.add(order)
-    await db.commit()
-    await db.refresh(order)
+    db.commit()
+    db.refresh(order)
+    # For immediate testing, caller can trigger /orders/batch_and_match or admin trigger
     return order
 
 @router.get("/batch_and_match")
-async def batch_and_match(db: AsyncSession = Depends(get_db)):
+async def batch_and_match(db = Depends(get_db)):
     """
     1) collect pending unassigned orders in current window
     2) create batches (for simplicity: one order per batch OR simple grouping)

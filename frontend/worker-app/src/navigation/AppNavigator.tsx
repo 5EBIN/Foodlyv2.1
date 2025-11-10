@@ -17,6 +17,9 @@ import OrderConfirmationScreen from '../screens/OrderConfirmationScreen';
 import MockPaymentScreen from '../screens/MockPaymentScreen';
 import ActiveOrderScreen from '../screens/ActiveOrderScreen';
 import ProfileScreen from '../screens/ProfileScreen';
+// Admin screens
+import AdminLogin from '../admin/AdminLogin';
+import AdminDashboard from '../admin/AdminDashboard';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -127,6 +130,17 @@ export default function AppNavigator() {
         <Stack.Screen name="Landing" component={LandingScreen} />
         <Stack.Screen name="Login" component={LoginScreen} />
         <Stack.Screen name="Main" component={MainScreen} />
+        {/* Admin Screens */}
+        <Stack.Screen
+          name="AdminLogin"
+          component={AdminLogin}
+          options={{ headerShown: true, title: 'Admin Login' }}
+        />
+        <Stack.Screen
+          name="AdminDashboard"
+          component={AdminDashboard}
+          options={{ headerShown: true, title: 'Admin Dashboard' }}
+        />
         {/* Customer Stack Screens */}
         <Stack.Screen
           name="RestaurantDetail"

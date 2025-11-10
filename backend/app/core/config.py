@@ -50,6 +50,18 @@ class Settings(BaseSettings):
     # ML Service
     ML_SERVICE_URL: str = "http://ml_service:8001"
     
+    # WORK4FOOD Configuration
+    BATCH_WINDOW_MINUTES: int = 3
+    AGENT_SPEED_KMPH: float = 25.0
+    PAY_PER_HOUR: float = 100.0
+    MIN_WAGE: float = 80.0
+    INITIAL_GUARANTEE_RATIO: float = 0.25
+    USE_DYNAMIC_GUARANTEE: bool = True
+    PREP_TIME_MINUTES: float = 8.0
+    CITY_CENTER_LAT: float = 19.0760  # Mumbai
+    CITY_CENTER_LON: float = 72.8777
+    CITY_RADIUS_KM: float = 12.0
+    
     class Config:
         env_file = ".env"
         case_sensitive = True

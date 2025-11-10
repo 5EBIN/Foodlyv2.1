@@ -80,6 +80,12 @@ class OrderOut(BaseModel):
     assigned_at: Optional[datetime]
     picked_up_at: Optional[datetime]
     delivered_at: Optional[datetime]
+    # WORK4FOOD fields (optional)
+    batch_id: Optional[str] = None
+    batch_window_start: Optional[datetime] = None
+    estimated_work_hours: Optional[float] = None
+    actual_work_hours: Optional[float] = None
+    assignment_cost: Optional[float] = None
     
     class Config:
         from_attributes = True
@@ -115,6 +121,16 @@ class AgentOut(BaseModel):
     vehicle_number: Optional[str]
     last_location: Optional[dict]
     created_at: datetime
+    # WORK4FOOD fields (optional)
+    work_hours: Optional[float] = None
+    active_hours: Optional[float] = None
+    earnings_total: Optional[float] = None
+    handout: Optional[float] = None
+    total_pay: Optional[float] = None
+    speed_kmph: Optional[float] = None
+    status: Optional[str] = None
+    last_location_lat: Optional[float] = None
+    last_location_lon: Optional[float] = None
     
     class Config:
         from_attributes = True
@@ -167,6 +183,23 @@ class EarningsSummary(BaseModel):
     this_week_earnings: float
     this_month_earnings: float
     total_deliveries: int
+
+# ============================================
+# Batch Assignment Schemas
+# ============================================
+
+class BatchAssignmentOut(BaseModel):
+    id: str
+    batch_id: str
+    window_start: datetime
+    window_end: datetime
+    total_orders: int
+    assigned_orders: int
+    guarantee_ratio: float
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
 
 # ============================================
 # Notification Schemas

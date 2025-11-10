@@ -3,7 +3,8 @@ Complete Database Models
 File: backend/app/models/models.py
 All tables with proper relationships and indexes
 """
-from sqlalchemy import Column, Integer, String, Float, Boolean, ForeignKey, DateTime, JSON, Text, Index
+from sqlalchemy import Column, Integer, String, Float, Boolean, ForeignKey, DateTime, JSON, Text, Index, Enum
+import enum
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from app.models.database import Base
@@ -19,6 +20,7 @@ class User(Base):
     email = Column(String(255), unique=True, nullable=True, index=True)  # Made optional
     hashed_password = Column(String(255), nullable=False)
     is_active = Column(Boolean, default=True)
+    role = Column(String(50), default="customer", index=True)  # admin, agent, customer
     is_agent = Column(Boolean, default=False, index=True)
 
     # Customer profile fields
@@ -96,6 +98,20 @@ class Order(Base):
     agent = relationship("Agent", back_populates="assigned_orders", foreign_keys=[assigned_agent_id])
     payment = relationship("Payment", back_populates="order", uselist=False)
 
+    # WORK4FOOD batching & matching metadata
+    batch_id = Column(String(64), nullable=True, index=True)  # e.g., batch_YYYYMMDD_HHMMSS
+    batch_window_start = Column(DateTime, nullable=True, index=True)
+    estimated_work_hours = Column(Float, default=0.0)
+    actual_work_hours = Column(Float, nullable=True)
+    assignment_cost = Column(Float, nullable=True)
+
+class AgentStatus(enum.Enum):
+    available = "available"
+    en_route = "en_route"
+    delivering = "delivering"
+    offline = "offline"
+
+
 class Agent(Base):
     """
     Agent table - delivery agents
@@ -115,7 +131,9 @@ class Agent(Base):
     total_deliveries = Column(Integer, default=0)
     
     # Location tracking
-    last_location = Column(JSON, nullable=True)  # {"lat": 40.7, "lng": -74.0, "timestamp": "..."}
+    last_location = Column(JSON, nullable=True)  # retained for backward-compat
+    last_location_lat = Column(Float, nullable=True)
+    last_location_lon = Column(Float, nullable=True)
     
     # Ratings
     rating = Column(Float, default=5.0)
@@ -132,6 +150,16 @@ class Agent(Base):
     user = relationship("User", back_populates="agent_profile")
     assigned_orders = relationship("Order", back_populates="agent", foreign_keys="Order.assigned_agent_id")
     earnings = relationship("Earning", back_populates="agent")
+
+    # WORK4FOOD tracking fields
+    # Hours in hours (not seconds) for compatibility with WORK4FOOD notation
+    work_hours = Column(Float, default=0.0)  # W_t
+    active_hours = Column(Float, default=0.0)  # A_t
+    earnings_total = Column(Float, default=0.0)  # cumulative earnings
+    handout = Column(Float, default=0.0)  # guarantee compensation
+    total_pay = Column(Float, default=0.0)  # earnings_total + handout
+    speed_kmph = Column(Float, default=25.0)
+    status = Column(Enum(AgentStatus), default=AgentStatus.available, nullable=False, index=True)
 
 class Earning(Base):
     """
@@ -237,11 +265,29 @@ class CustomerOrder(Base):
     restaurant = relationship("Restaurant", back_populates="customer_orders")
     agent = relationship("Agent", foreign_keys=[assigned_agent_id])
 
+class BatchAssignment(Base):
+    """
+    BatchAssignment table - tracks matching runs (3-minute windows)
+    """
+    __tablename__ = "batch_assignments"
+
+    id = Column(String(36), primary_key=True)  # UUID string
+    batch_id = Column(String(64), nullable=False, unique=True, index=True)
+    window_start = Column(DateTime, nullable=False, index=True)
+    window_end = Column(DateTime, nullable=False)
+    total_orders = Column(Integer, default=0)
+    assigned_orders = Column(Integer, default=0)
+    guarantee_ratio = Column(Float, default=0.25)
+    created_at = Column(DateTime, server_default=func.now())
+
 # Create indexes for better query performance
 Index('idx_orders_status_agent', Order.status, Order.assigned_agent_id)
 Index('idx_orders_user_status', Order.user_id, Order.status)
+Index('idx_orders_batch_id', Order.batch_id)
+Index('idx_orders_batch_window', Order.batch_window_start)
 Index('idx_earnings_agent_timestamp', Earning.agent_id, Earning.timestamp)
 Index('idx_payments_order_status', Payment.order_id, Payment.status)
 Index('idx_customer_orders_status', CustomerOrder.status)
 Index('idx_customer_orders_customer', CustomerOrder.customer_id, CustomerOrder.status)
 Index('idx_customer_orders_agent', CustomerOrder.assigned_agent_id, CustomerOrder.status)
+Index('idx_agent_status', Agent.status)

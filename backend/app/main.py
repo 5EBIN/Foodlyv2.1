@@ -6,10 +6,13 @@ Complete setup with database initialization and routes
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
+import logging
 from app.core.config import settings
 from app.models.database import Base, engine, create_tables
+from app.core.batch_scheduler import start_scheduler
 from app.models import models  # Import all models to register them
 from app.routers import auth
+from app.routers import restaurants, customer_orders, earnings, agents, admin
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -29,11 +32,24 @@ async def lifespan(app: FastAPI):
         print("[WARNING] PostgreSQL detected - implement async table creation")
     
     print("[SUCCESS] Application ready!")
+    # Start WORK4FOOD batch scheduler
+    try:
+        app.state.scheduler = start_scheduler()
+        logging.getLogger(__name__).info("WORK4FOOD scheduler started")
+    except Exception as e:
+        logging.getLogger(__name__).exception(f"Failed to start scheduler: {e}")
     
     yield
     
     # Shutdown
     print("[SHUTDOWN] Shutting down...")
+    # Stop scheduler if running
+    scheduler = getattr(app.state, "scheduler", None)
+    if scheduler:
+        try:
+            scheduler.shutdown()
+        except Exception:
+            pass
 
 # Create FastAPI app
 app = FastAPI(
@@ -75,11 +91,11 @@ async def health_check():
 app.include_router(auth.router, prefix="/api")
 
 # Import and include new routers
-from app.routers import restaurants, customer_orders, earnings
-
 app.include_router(restaurants.router, prefix="/api")
 app.include_router(customer_orders.router, prefix="/api")
 app.include_router(earnings.router, prefix="/api")
+app.include_router(agents.router, prefix="/api")
+app.include_router(admin.router, prefix="/api")
 
 # You can add more routers here:
 # from app.routers import orders, agents, payments
