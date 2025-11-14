@@ -1,4 +1,3 @@
-// src/screens/OrdersScreen.tsx
 import React from 'react';
 import {
   View,
@@ -6,77 +5,86 @@ import {
   FlatList,
   TouchableOpacity,
   StyleSheet,
-  RefreshControl,
   ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Ionicons } from '@expo/vector-icons';
 import { apiService } from '../services/api';
-import type { Order } from '../types';
+import { Ionicons } from '@expo/vector-icons';
 
-export default function OrdersScreen() {
+export default function OrdersScreen({ navigation }: any) {
   const queryClient = useQueryClient();
 
-  const { data: orders = [], isLoading, refetch, isRefetching } = useQuery({
-    queryKey: ['orders'],
-    queryFn: apiService.getOrders,
-    refetchInterval: 30000,
+  const { data: orders, isLoading, error, refetch, isRefreshing } = useQuery({
+    queryKey: ['availableOrders'],
+    queryFn: () => apiService.getAvailableOrders(),
+    refetchInterval: 5000, // Poll every 5 seconds for new orders
   });
 
   const acceptOrderMutation = useMutation({
-    mutationFn: apiService.acceptOrder,
+    mutationFn: (orderId: number) => apiService.acceptOrder(orderId),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['orders'] });
+      queryClient.invalidateQueries({ queryKey: ['availableOrders'] });
       queryClient.invalidateQueries({ queryKey: ['currentJob'] });
+      navigation.navigate('CurrentJob');
     },
   });
 
-  const renderOrder = ({ item }: { item: Order }) => {
-    const gValueColor = item.g_mean 
-      ? item.g_mean > 0.7 ? '#10B981' 
-      : item.g_mean > 0.4 ? '#F59E0B' 
-      : '#EF4444'
-      : '#9CA3AF';
+  const renderOrder = ({ item }: any) => {
+    const customerOrder = item.customer_order;
 
     return (
       <View style={styles.orderCard}>
         <View style={styles.orderHeader}>
-          <View style={styles.locationContainer}>
-            <Ionicons name="location" size={20} color="#3B82F6" />
-            <View style={styles.locationText}>
-              <Text style={styles.locationLabel}>From:</Text>
-              <Text style={styles.locationValue}>{item.pickup}</Text>
-            </View>
+          <View style={styles.orderIdContainer}>
+            <Ionicons name="receipt-outline" size={20} color="#3B82F6" />
+            <Text style={styles.orderId}>Order #{item.id}</Text>
           </View>
-          <View style={styles.locationContainer}>
-            <Ionicons name="flag" size={20} color="#EF4444" />
-            <View style={styles.locationText}>
-              <Text style={styles.locationLabel}>To:</Text>
-              <Text style={styles.locationValue}>{item.dropoff}</Text>
-            </View>
+          <View style={styles.amountBadge}>
+            <Text style={styles.amountText}>${item.amount.toFixed(2)}</Text>
           </View>
         </View>
-        <View style={styles.orderDetails}>
-          <View style={styles.detailItem}>
-            <Ionicons name="time" size={18} color="#6B7280" />
-            <Text style={styles.detailText}>{item.eta} min ETA</Text>
-          </View>
-          {item.g_mean !== undefined && (
-            <View style={styles.gValueContainer}>
-              <Text style={styles.gValueLabel}>G-Value:</Text>
-              <View style={[styles.gValueBadge, { backgroundColor: gValueColor }]}>
-                <Text style={styles.gValueText}>
-                  {item.g_mean.toFixed(2)}
-                </Text>
-              </View>
-              {item.g_var !== undefined && (
-                <Text style={styles.varianceText}>
-                  ±{Math.sqrt(item.g_var).toFixed(3)}
-                </Text>
-              )}
+
+        {/* Restaurant or Customer Order Info */}
+        {customerOrder ? (
+          <View style={styles.orderInfo}>
+            <View style={styles.infoRow}>
+              <Ionicons name="restaurant-outline" size={18} color="#6B7280" />
+              <Text style={styles.infoLabel}>Restaurant:</Text>
+              <Text style={styles.infoValue}>{customerOrder.restaurant?.name || 'N/A'}</Text>
             </View>
-          )}
+            <View style={styles.infoRow}>
+              <Ionicons name="person-outline" size={18} color="#6B7280" />
+              <Text style={styles.infoLabel}>Customer:</Text>
+              <Text style={styles.infoValue}>Customer #{customerOrder.customer_id}</Text>
+            </View>
+            <View style={styles.infoRow}>
+              <Ionicons name="location-outline" size={18} color="#6B7280" />
+              <Text style={styles.infoLabel}>Delivery:</Text>
+              <Text style={styles.infoValue} numberOfLines={1}>{customerOrder.delivery_address}</Text>
+            </View>
+          </View>
+        ) : (
+          <View style={styles.orderInfo}>
+            <View style={styles.infoRow}>
+              <Ionicons name="location-outline" size={18} color="#6B7280" />
+              <Text style={styles.infoLabel}>Pickup:</Text>
+              <Text style={styles.infoValue} numberOfLines={1}>{item.pickup_location}</Text>
+            </View>
+            <View style={styles.infoRow}>
+              <Ionicons name="navigate-outline" size={18} color="#6B7280" />
+              <Text style={styles.infoLabel}>Dropoff:</Text>
+              <Text style={styles.infoValue} numberOfLines={1}>{item.dropoff_location}</Text>
+            </View>
+          </View>
+        )}
+
+        {/* ML Assignment Info */}
+        <View style={styles.mlBadge}>
+          <Ionicons name="sparkles" size={16} color="#8B5CF6" />
+          <Text style={styles.mlBadgeText}>Fair ML Assignment Available</Text>
         </View>
+
         <TouchableOpacity
           style={[
             styles.acceptButton,
@@ -86,7 +94,10 @@ export default function OrdersScreen() {
           disabled={acceptOrderMutation.isPending}
         >
           {acceptOrderMutation.isPending ? (
-            <ActivityIndicator color="#fff" size="small" />
+            <>
+              <ActivityIndicator color="#fff" size="small" />
+              <Text style={styles.acceptButtonText}>Accepting...</Text>
+            </>
           ) : (
             <>
               <Ionicons name="checkmark-circle" size={20} color="#fff" />
@@ -98,11 +109,23 @@ export default function OrdersScreen() {
     );
   };
 
-  if (isLoading) {
+  if (isLoading && !orders) {
     return (
-      <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color="#3B82F6" />
-        <Text style={styles.loadingText}>Loading orders...</Text>
+      <View style={styles.loading}>
+        <ActivityIndicator size="large" color="#10B981" />
+        <Text style={styles.loadingText}>Loading available orders...</Text>
+      </View>
+    );
+  }
+
+  if (error) {
+    return (
+      <View style={styles.error}>
+        <Ionicons name="alert-circle-outline" size={48} color="#EF4444" />
+        <Text style={styles.errorText}>Failed to load orders</Text>
+        <TouchableOpacity style={styles.retryButton} onPress={() => refetch()}>
+          <Text style={styles.retryButtonText}>Retry</Text>
+        </TouchableOpacity>
       </View>
     );
   }
@@ -112,16 +135,16 @@ export default function OrdersScreen() {
       <FlatList
         data={orders}
         renderItem={renderOrder}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.listContent}
+        keyExtractor={(item) => item.id.toString()}
+        contentContainerStyle={styles.list}
         refreshControl={
-          <RefreshControl refreshing={isRefetching} onRefresh={refetch} />
+          <RefreshControl refreshing={isRefreshing} onRefresh={refetch} colors={['#10B981']} />
         }
         ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            <Ionicons name="clipboard-outline" size={64} color="#D1D5DB" />
-            <Text style={styles.emptyText}>No available orders</Text>
-            <Text style={styles.emptySubtext}>Pull down to refresh</Text>
+          <View style={styles.empty}>
+            <Ionicons name="bicycle-outline" size={64} color="#9CA3AF" />
+            <Text style={styles.emptyText}>No Orders Available</Text>
+            <Text style={styles.emptySubtext}>New delivery orders will appear here</Text>
           </View>
         }
       />
@@ -134,7 +157,7 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#F3F4F6',
   },
-  centerContainer: {
+  loading: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
@@ -145,7 +168,32 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#6B7280',
   },
-  listContent: {
+  error: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#F3F4F6',
+    padding: 24,
+  },
+  errorText: {
+    marginTop: 12,
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#1F2937',
+  },
+  retryButton: {
+    marginTop: 16,
+    backgroundColor: '#10B981',
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  list: {
     padding: 16,
   },
   orderCard: {
@@ -160,100 +208,97 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   orderHeader: {
-    marginBottom: 12,
-  },
-  locationContainer: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    marginBottom: 8,
-  },
-  locationText: {
-    marginLeft: 8,
-    flex: 1,
-  },
-  locationLabel: {
-    fontSize: 12,
-    color: '#9CA3AF',
-    marginBottom: 2,
-  },
-  locationValue: {
-    fontSize: 16,
-    color: '#1F2937',
-    fontWeight: '500',
-  },
-  orderDetails: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 12,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
   },
-  detailItem: {
+  orderIdContainer: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 8,
   },
-  detailText: {
-    marginLeft: 6,
-    fontSize: 14,
-    color: '#6B7280',
-  },
-  gValueContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  gValueLabel: {
-    fontSize: 12,
-    color: '#6B7280',
-    marginRight: 6,
-  },
-  gValueBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  gValueText: {
-    color: '#fff',
-    fontSize: 14,
+  orderId: {
+    fontSize: 16,
     fontWeight: 'bold',
+    color: '#1F2937',
   },
-  varianceText: {
-    fontSize: 11,
-    color: '#9CA3AF',
-    marginLeft: 4,
+  amountBadge: {
+    backgroundColor: '#ECFDF5',
+    paddingVertical: 4,
+    paddingHorizontal: 12,
+    borderRadius: 16,
+  },
+  amountText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#059669',
+  },
+  orderInfo: {
+    gap: 8,
+    marginBottom: 12,
+  },
+  infoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  infoLabel: {
+    fontSize: 14,
+    color: '#6B7280',
+    width: 80,
+  },
+  infoValue: {
+    flex: 1,
+    fontSize: 14,
+    color: '#1F2937',
+    fontWeight: '500',
+  },
+  mlBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F5F3FF',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    gap: 6,
+    marginBottom: 12,
+  },
+  mlBadgeText: {
+    fontSize: 12,
+    color: '#7C3AED',
+    fontWeight: '600',
   },
   acceptButton: {
-    backgroundColor: '#3B82F6',
-    borderRadius: 8,
-    padding: 12,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: '#10B981',
+    paddingVertical: 12,
+    borderRadius: 8,
+    gap: 8,
   },
   acceptButtonDisabled: {
-    opacity: 0.6,
+    backgroundColor: '#9CA3AF',
   },
   acceptButtonText: {
     color: '#fff',
     fontSize: 16,
-    fontWeight: '600',
-    marginLeft: 8,
+    fontWeight: 'bold',
   },
-  emptyContainer: {
+  empty: {
     alignItems: 'center',
-    justifyContent: 'center',
     paddingVertical: 64,
   },
   emptyText: {
-    fontSize: 18,
-    color: '#6B7280',
     marginTop: 16,
-    fontWeight: '500',
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#6B7280',
   },
   emptySubtext: {
+    marginTop: 8,
     fontSize: 14,
     color: '#9CA3AF',
-    marginTop: 4,
   },
 });

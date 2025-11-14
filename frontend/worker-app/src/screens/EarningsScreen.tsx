@@ -1,106 +1,137 @@
-// src/screens/EarningsScreen.tsx
 import React from 'react';
 import {
   View,
   Text,
   FlatList,
   StyleSheet,
-  RefreshControl,
   ActivityIndicator,
-  TouchableOpacity,
+  RefreshControl,
 } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
-import { Ionicons } from '@expo/vector-icons';
 import { apiService } from '../services/api';
-import type { CompletedJob } from '../types';
+import { Ionicons } from '@expo/vector-icons';
 
-export default function EarningsScreen({ navigation }: any) {
-  const { data: earnings, isLoading, refetch, isRefetching } = useQuery({
+export default function EarningsScreen() {
+  const { data: earnings, isLoading, error, refetch, isRefreshing } = useQuery({
     queryKey: ['earnings'],
-    queryFn: apiService.getEarnings,
+    queryFn: () => apiService.getEarnings(),
   });
 
-  const handleLogout = async () => {
-    await apiService.logout();
-    navigation.replace('Login');
-  };
-
-  const renderJobItem = ({ item }: { item: CompletedJob }) => {
-    const completedDate = new Date(item.completedAt);
-    const formattedDate = completedDate.toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-
-    return (
-      <View style={styles.jobCard}>
-        <View style={styles.jobHeader}>
-          <Ionicons name="checkmark-circle" size={20} color="#10B981" />
-          <Text style={styles.jobId}>Order #{item.id}</Text>
-          <Text style={styles.jobDate}>{formattedDate}</Text>
+  const renderEarning = ({ item }: any) => (
+    <View style={styles.earningCard}>
+      <View style={styles.earningHeader}>
+        <View style={styles.orderInfo}>
+          <Ionicons name="receipt-outline" size={20} color="#3B82F6" />
+          <Text style={styles.orderId}>Order #{item.order_id}</Text>
         </View>
-        <View style={styles.jobRoute}>
-          <View style={styles.routeItem}>
-            <Ionicons name="location" size={16} color="#3B82F6" />
-            <Text style={styles.routeText}>{item.pickup}</Text>
-          </View>
-          <Ionicons name="arrow-forward" size={16} color="#9CA3AF" />
-          <View style={styles.routeItem}>
-            <Ionicons name="flag" size={16} color="#EF4444" />
-            <Text style={styles.routeText}>{item.dropoff}</Text>
-          </View>
+        <Text style={styles.date}>{new Date(item.created_at).toLocaleDateString()}</Text>
+      </View>
+
+      <View style={styles.earningDetails}>
+        <View style={styles.earningRow}>
+          <Text style={styles.earningLabel}>Amount Earned</Text>
+          <Text style={styles.earningAmount}>${item.amount.toFixed(2)}</Text>
         </View>
-        <View style={styles.earningsRow}>
-          <Text style={styles.earningsLabel}>Earnings:</Text>
-          <Text style={styles.earningsAmount}>${item.earnings.toFixed(2)}</Text>
+
+        {item.customer_order && (
+          <View style={styles.orderMeta}>
+            <Ionicons name="restaurant-outline" size={16} color="#6B7280" />
+            <Text style={styles.orderMetaText}>
+              {item.customer_order.restaurant?.name || 'Restaurant'}
+            </Text>
+          </View>
+        )}
+
+        <View style={styles.statusBadge}>
+          <Ionicons
+            name={item.paid_out ? 'checkmark-circle' : 'time-outline'}
+            size={16}
+            color={item.paid_out ? '#059669' : '#F59E0B'}
+          />
+          <Text style={[styles.statusText, item.paid_out && styles.statusTextPaid]}>
+            {item.paid_out ? 'Paid Out' : 'Pending'}
+          </Text>
         </View>
       </View>
-    );
-  };
+    </View>
+  );
+
+  // Calculate total earnings
+  const totalEarnings = earnings?.reduce((sum: number, item: any) => sum + item.amount, 0) || 0;
+  const paidOut = earnings?.reduce((sum: number, item: any) => sum + (item.paid_out ? item.amount : 0), 0) || 0;
+  const pending = totalEarnings - paidOut;
 
   if (isLoading) {
     return (
-      <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color="#3B82F6" />
+      <View style={styles.loading}>
+        <ActivityIndicator size="large" color="#10B981" />
         <Text style={styles.loadingText}>Loading earnings...</Text>
       </View>
     );
   }
 
-  const totalEarnings = earnings?.totalEarnings || 0;
-  const completedJobs = earnings?.completedJobs || [];
+  if (error) {
+    return (
+      <View style={styles.error}>
+        <Ionicons name="alert-circle-outline" size={48} color="#EF4444" />
+        <Text style={styles.errorText}>Failed to load earnings</Text>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
-      <View style={styles.summaryCard}>
-        <Text style={styles.summaryLabel}>Total Earnings</Text>
-        <Text style={styles.summaryAmount}>${totalEarnings.toFixed(2)}</Text>
-        <Text style={styles.summarySubtext}>
-          {completedJobs.length} completed {completedJobs.length === 1 ? 'job' : 'jobs'}
+      {/* Summary Cards */}
+      <View style={styles.summaryContainer}>
+        <View style={[styles.summaryCard, styles.totalCard]}>
+          <Ionicons name="wallet" size={32} color="#fff" />
+          <Text style={styles.summaryLabel}>Total Earned</Text>
+          <Text style={styles.summaryValue}>${totalEarnings.toFixed(2)}</Text>
+        </View>
+
+        <View style={styles.summaryRow}>
+          <View style={[styles.summaryCard, styles.paidCard]}>
+            <Ionicons name="checkmark-circle-outline" size={24} color="#059669" />
+            <Text style={styles.summaryLabelSmall}>Paid Out</Text>
+            <Text style={styles.summaryValueSmall}>${paidOut.toFixed(2)}</Text>
+          </View>
+
+          <View style={[styles.summaryCard, styles.pendingCard]}>
+            <Ionicons name="time-outline" size={24} color="#F59E0B" />
+            <Text style={styles.summaryLabelSmall}>Pending</Text>
+            <Text style={styles.summaryValueSmall}>${pending.toFixed(2)}</Text>
+          </View>
+        </View>
+      </View>
+
+      {/* ML Info */}
+      <View style={styles.mlInfoCard}>
+        <Ionicons name="sparkles" size={20} color="#8B5CF6" />
+        <Text style={styles.mlInfoText}>
+          Fair earnings distributed through our ML algorithm
         </Text>
       </View>
-      <FlatList
-        data={completedJobs}
-        renderItem={renderJobItem}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.listContent}
-        refreshControl={
-          <RefreshControl refreshing={isRefetching} onRefresh={refetch} />
-        }
-        ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            <Ionicons name="wallet-outline" size={64} color="#D1D5DB" />
-            <Text style={styles.emptyText}>No completed jobs yet</Text>
-            <Text style={styles.emptySubtext}>Complete jobs to see earnings</Text>
-          </View>
-        }
-      />
-      <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-        <Ionicons name="log-out-outline" size={20} color="#EF4444" />
-        <Text style={styles.logoutText}>Logout</Text>
-      </TouchableOpacity>
+
+      {/* Earnings List */}
+      <View style={styles.listContainer}>
+        <Text style={styles.listTitle}>Earnings History</Text>
+        <FlatList
+          data={earnings}
+          renderItem={renderEarning}
+          keyExtractor={(item) => item.id.toString()}
+          contentContainerStyle={styles.list}
+          refreshControl={
+            <RefreshControl refreshing={isRefreshing} onRefresh={refetch} colors={['#10B981']} />
+          }
+          ListEmptyComponent={
+            <View style={styles.empty}>
+              <Ionicons name="wallet-outline" size={48} color="#9CA3AF" />
+              <Text style={styles.emptyText}>No Earnings Yet</Text>
+              <Text style={styles.emptySubtext}>Complete deliveries to start earning</Text>
+            </View>
+          }
+        />
+      </View>
     </View>
   );
 }
@@ -110,7 +141,7 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#F3F4F6',
   },
-  centerContainer: {
+  loading: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
@@ -121,130 +152,198 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#6B7280',
   },
-  summaryCard: {
-    backgroundColor: '#3B82F6',
-    margin: 16,
-    borderRadius: 12,
-    padding: 24,
+  error: {
+    flex: 1,
+    justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: '#F3F4F6',
+    padding: 24,
+  },
+  errorText: {
+    marginTop: 12,
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#1F2937',
+  },
+  summaryContainer: {
+    padding: 16,
+  },
+  summaryCard: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 20,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
   },
-  summaryLabel: {
-    fontSize: 14,
-    color: '#fff',
-    opacity: 0.9,
-    marginBottom: 8,
+  totalCard: {
+    backgroundColor: '#10B981',
+    marginBottom: 16,
+    alignItems: 'center',
   },
-  summaryAmount: {
+  summaryLabel: {
+    fontSize: 16,
+    color: '#fff',
+    marginTop: 12,
+    opacity: 0.9,
+  },
+  summaryValue: {
     fontSize: 36,
     fontWeight: 'bold',
     color: '#fff',
-    marginBottom: 4,
+    marginTop: 8,
   },
-  summarySubtext: {
-    fontSize: 12,
-    color: '#fff',
-    opacity: 0.8,
+  summaryRow: {
+    flexDirection: 'row',
+    gap: 12,
   },
-  listContent: {
-    padding: 16,
-    paddingTop: 0,
+  paidCard: {
+    flex: 1,
+    borderWidth: 2,
+    borderColor: '#D1FAE5',
   },
-  jobCard: {
+  pendingCard: {
+    flex: 1,
+    borderWidth: 2,
+    borderColor: '#FEF3C7',
+  },
+  summaryLabelSmall: {
+    fontSize: 13,
+    color: '#6B7280',
+    marginTop: 8,
+  },
+  summaryValueSmall: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#1F2937',
+    marginTop: 4,
+  },
+  mlInfoCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F5F3FF',
+    marginHorizontal: 16,
+    marginBottom: 16,
+    padding: 12,
+    borderRadius: 12,
+    gap: 8,
+  },
+  mlInfoText: {
+    flex: 1,
+    fontSize: 13,
+    color: '#7C3AED',
+    fontWeight: '500',
+  },
+  listContainer: {
+    flex: 1,
     backgroundColor: '#fff',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingTop: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  listTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#1F2937',
+    paddingHorizontal: 16,
+    marginBottom: 12,
+  },
+  list: {
+    paddingHorizontal: 16,
+    paddingBottom: 16,
+  },
+  earningCard: {
+    backgroundColor: '#F9FAFB',
     borderRadius: 12,
     padding: 16,
     marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
   },
-  jobHeader: {
+  earningHeader: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 12,
   },
-  jobId: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1F2937',
-    marginLeft: 8,
-    flex: 1,
+  orderInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
-  jobDate: {
-    fontSize: 12,
+  orderId: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#1F2937',
+  },
+  date: {
+    fontSize: 13,
     color: '#9CA3AF',
   },
-  jobRoute: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 12,
-    paddingBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+  earningDetails: {
+    gap: 8,
   },
-  routeItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
-  routeText: {
-    marginLeft: 6,
-    fontSize: 14,
-    color: '#6B7280',
-    flex: 1,
-  },
-  earningsRow: {
+  earningRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  earningsLabel: {
+  earningLabel: {
     fontSize: 14,
     color: '#6B7280',
   },
-  earningsAmount: {
-    fontSize: 18,
+  earningAmount: {
+    fontSize: 20,
     fontWeight: 'bold',
     color: '#10B981',
   },
-  emptyContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 64,
-  },
-  emptyText: {
-    fontSize: 18,
-    color: '#6B7280',
-    marginTop: 16,
-    fontWeight: '500',
-  },
-  emptySubtext: {
-    fontSize: 14,
-    color: '#9CA3AF',
-    marginTop: 4,
-  },
-  logoutButton: {
+  orderMeta: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#fff',
-    margin: 16,
-    padding: 16,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#EF4444',
+    gap: 6,
   },
-  logoutText: {
-    color: '#EF4444',
-    fontSize: 16,
+  orderMetaText: {
+    fontSize: 13,
+    color: '#6B7280',
+  },
+  statusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    alignSelf: 'flex-start',
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    backgroundColor: '#FEF3C7',
+    borderRadius: 12,
+  },
+  statusText: {
+    fontSize: 12,
     fontWeight: '600',
-    marginLeft: 8,
+    color: '#92400E',
+  },
+  statusTextPaid: {
+    color: '#065F46',
+  },
+  empty: {
+    alignItems: 'center',
+    paddingVertical: 48,
+  },
+  emptyText: {
+    marginTop: 16,
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#6B7280',
+  },
+  emptySubtext: {
+    marginTop: 8,
+    fontSize: 14,
+    color: '#9CA3AF',
   },
 });

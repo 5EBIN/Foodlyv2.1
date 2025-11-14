@@ -1,148 +1,178 @@
-// src/screens/CurrentJobScreen.tsx
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import {
   View,
   Text,
-  TouchableOpacity,
   StyleSheet,
+  TouchableOpacity,
+  ScrollView,
   ActivityIndicator,
   Alert,
 } from 'react-native';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Ionicons } from '@expo/vector-icons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiService } from '../services/api';
+import { Ionicons } from '@expo/vector-icons';
 
 export default function CurrentJobScreen() {
-  const [currentJob, setCurrentJob] = useState<any>(null);
-  const [timer, setTimer] = useState(0);
   const queryClient = useQueryClient();
 
-  useEffect(() => {
-    loadCurrentJob();
-  }, []);
+  const { data: currentJob, isLoading, error } = useQuery({
+    queryKey: ['currentJob'],
+    queryFn: () => apiService.getCurrentJob(),
+    refetchInterval: 3000, // Poll every 3 seconds
+  });
 
-  useEffect(() => {
-    if (currentJob) {
-      const interval = setInterval(() => {
-        setTimer((prev) => prev + 1);
-      }, 1000);
-      return () => clearInterval(interval);
-    }
-  }, [currentJob]);
-
-  const loadCurrentJob = async () => {
-    const jobStr = await AsyncStorage.getItem('current_job');
-    if (jobStr) {
-      setCurrentJob(JSON.parse(jobStr));
-    }
-  };
-
-  const completeJobMutation = useMutation({
-    mutationFn: async (orderId: string) => {
-      await apiService.completeOrder(orderId);
-      await AsyncStorage.removeItem('current_job');
-    },
+  const completeOrderMutation = useMutation({
+    mutationFn: (orderId: number) => apiService.completeOrder(orderId),
     onSuccess: () => {
-      setCurrentJob(null);
-      setTimer(0);
-      queryClient.invalidateQueries({ queryKey: ['orders'] });
+      Alert.alert('Success', 'Order completed successfully!');
+      queryClient.invalidateQueries({ queryKey: ['currentJob'] });
       queryClient.invalidateQueries({ queryKey: ['earnings'] });
-      Alert.alert('Success', 'Job completed successfully!');
-    },
-    onError: (error: any) => {
-      Alert.alert('Error', error.message || 'Failed to complete job');
     },
   });
 
-  const formatTime = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-  };
-
-  if (!currentJob) {
+  if (isLoading) {
     return (
-      <View style={styles.emptyContainer}>
-        <Ionicons name="briefcase-outline" size={64} color="#D1D5DB" />
-        <Text style={styles.emptyText}>No active job</Text>
-        <Text style={styles.emptySubtext}>
-          Accept an order from the Orders tab
-        </Text>
+      <View style={styles.loading}>
+        <ActivityIndicator size="large" color="#10B981" />
+        <Text style={styles.loadingText}>Loading current job...</Text>
       </View>
     );
   }
 
+  if (error || !currentJob) {
+    return (
+      <View style={styles.empty}>
+        <Ionicons name="briefcase-outline" size={64} color="#9CA3AF" />
+        <Text style={styles.emptyText}>No Active Job</Text>
+        <Text style={styles.emptySubtext}>Accept an order to start delivering</Text>
+      </View>
+    );
+  }
+
+  const customerOrder = currentJob.customer_order;
+
   return (
-    <View style={styles.container}>
-      <View style={styles.content}>
-        <View style={styles.timerContainer}>
-          <Text style={styles.timerLabel}>Time on Job</Text>
-          <Text style={styles.timerText}>{formatTime(timer)}</Text>
+    <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+      {/* Job Header */}
+      <View style={styles.header}>
+        <View style={styles.jobIdContainer}>
+          <Ionicons name="briefcase" size={32} color="#fff" />
+          <Text style={styles.jobId}>Order #{currentJob.id}</Text>
         </View>
-        <View style={styles.jobCard}>
-          <View style={styles.jobHeader}>
-            <Ionicons name="checkmark-circle" size={32} color="#10B981" />
-            <Text style={styles.jobStatus}>Job In Progress</Text>
+        <View style={styles.amountBadge}>
+          <Text style={styles.amountText}>${currentJob.amount.toFixed(2)}</Text>
+        </View>
+      </View>
+
+      {/* Status Card */}
+      <View style={styles.card}>
+        <Text style={styles.cardTitle}>Current Status</Text>
+        <View style={styles.statusBadge}>
+          <Ionicons name="time" size={20} color="#F59E0B" />
+          <Text style={styles.statusText}>{currentJob.status.toUpperCase()}</Text>
+        </View>
+      </View>
+
+      {/* Order Details */}
+      {customerOrder && (
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Order Details</Text>
+          <View style={styles.detailRow}>
+            <Ionicons name="restaurant-outline" size={20} color="#6B7280" />
+            <Text style={styles.detailLabel}>Restaurant</Text>
+            <Text style={styles.detailValue}>{customerOrder.restaurant?.name || 'N/A'}</Text>
           </View>
-          <View style={styles.divider} />
-          <View style={styles.locationSection}>
-            <View style={styles.locationRow}>
-              <View style={styles.iconContainer}>
-                <Ionicons name="location" size={24} color="#3B82F6" />
-              </View>
-              <View style={styles.locationDetails}>
-                <Text style={styles.locationLabel}>Pickup Location</Text>
-                <Text style={styles.locationValue}>{currentJob.pickup}</Text>
-              </View>
-            </View>
-            <View style={styles.routeLine} />
-            <View style={styles.locationRow}>
-              <View style={styles.iconContainer}>
-                <Ionicons name="flag" size={24} color="#EF4444" />
-              </View>
-              <View style={styles.locationDetails}>
-                <Text style={styles.locationLabel}>Dropoff Location</Text>
-                <Text style={styles.locationValue}>{currentJob.dropoff}</Text>
-              </View>
-            </View>
+          <View style={styles.detailRow}>
+            <Ionicons name="person-outline" size={20} color="#6B7280" />
+            <Text style={styles.detailLabel}>Customer</Text>
+            <Text style={styles.detailValue}>Customer #{customerOrder.customer_id}</Text>
           </View>
-          <View style={styles.detailsSection}>
-            <View style={styles.detailItem}>
-              <Ionicons name="time-outline" size={20} color="#6B7280" />
-              <Text style={styles.detailText}>
-                Estimated: {currentJob.eta} min
-              </Text>
-            </View>
-            {currentJob.g_mean && (
-              <View style={styles.detailItem}>
-                <Ionicons name="analytics-outline" size={20} color="#6B7280" />
-                <Text style={styles.detailText}>
-                  G-Value: {currentJob.g_mean.toFixed(2)}
-                </Text>
-              </View>
-            )}
+          <View style={styles.detailRow}>
+            <Ionicons name="cash-outline" size={20} color="#6B7280" />
+            <Text style={styles.detailLabel}>Amount</Text>
+            <Text style={styles.detailValue}>${customerOrder.amount.toFixed(2)}</Text>
           </View>
         </View>
+      )}
+
+      {/* Delivery Address */}
+      {customerOrder && (
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Delivery Address</Text>
+          <View style={styles.addressContainer}>
+            <Ionicons name="location" size={24} color="#E23744" />
+            <Text style={styles.addressText}>{customerOrder.delivery_address}</Text>
+          </View>
+        </View>
+      )}
+
+      {/* Pickup/Dropoff for non-customer orders */}
+      {!customerOrder && (
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Delivery Details</Text>
+          <View style={styles.detailRow}>
+            <Ionicons name="location-outline" size={20} color="#6B7280" />
+            <Text style={styles.detailLabel}>Pickup</Text>
+            <Text style={styles.detailValue}>{currentJob.pickup_location}</Text>
+          </View>
+          <View style={styles.detailRow}>
+            <Ionicons name="navigate-outline" size={20} color="#6B7280" />
+            <Text style={styles.detailLabel}>Dropoff</Text>
+            <Text style={styles.detailValue}>{currentJob.dropoff_location}</Text>
+          </View>
+        </View>
+      )}
+
+      {/* ML Info */}
+      <View style={styles.mlInfoCard}>
+        <Ionicons name="sparkles" size={24} color="#8B5CF6" />
+        <View style={styles.mlInfoTextContainer}>
+          <Text style={styles.mlInfoTitle}>Fair AI Assignment</Text>
+          <Text style={styles.mlInfoText}>
+            This delivery was assigned to you using our ML algorithm that ensures fair
+            distribution of work opportunities.
+          </Text>
+        </View>
+      </View>
+
+      {/* Complete Order Button */}
+      <View style={styles.buttonContainer}>
         <TouchableOpacity
           style={[
             styles.completeButton,
-            completeJobMutation.isPending && styles.buttonDisabled,
+            completeOrderMutation.isPending && styles.completeButtonDisabled,
           ]}
-          onPress={() => completeJobMutation.mutate(currentJob.id)}
-          disabled={completeJobMutation.isPending}
+          onPress={() => {
+            Alert.alert(
+              'Complete Order',
+              'Have you delivered the order?',
+              [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                  text: 'Complete',
+                  onPress: () => completeOrderMutation.mutate(currentJob.id),
+                },
+              ]
+            );
+          }}
+          disabled={completeOrderMutation.isPending}
         >
-          {completeJobMutation.isPending ? (
-            <ActivityIndicator color="#fff" />
+          {completeOrderMutation.isPending ? (
+            <>
+              <ActivityIndicator color="#fff" />
+              <Text style={styles.completeButtonText}>Completing...</Text>
+            </>
           ) : (
             <>
               <Ionicons name="checkmark-done" size={24} color="#fff" />
-              <Text style={styles.completeButtonText}>Complete Job</Text>
+              <Text style={styles.completeButtonText}>Complete Delivery</Text>
             </>
           )}
         </TouchableOpacity>
       </View>
-    </View>
+
+      <View style={styles.bottomSpacer} />
+    </ScrollView>
   );
 }
 
@@ -151,147 +181,168 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#F3F4F6',
   },
-  content: {
-    flex: 1,
-    padding: 16,
-  },
-  emptyContainer: {
+  loading: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 32,
     backgroundColor: '#F3F4F6',
   },
-  emptyText: {
-    fontSize: 20,
-    fontWeight: '600',
+  loadingText: {
+    marginTop: 12,
+    fontSize: 16,
     color: '#6B7280',
+  },
+  empty: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#F3F4F6',
+    padding: 24,
+  },
+  emptyText: {
     marginTop: 16,
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#6B7280',
   },
   emptySubtext: {
+    marginTop: 8,
     fontSize: 14,
     color: '#9CA3AF',
-    marginTop: 8,
-    textAlign: 'center',
   },
-  timerContainer: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
+  header: {
+    backgroundColor: '#10B981',
     padding: 24,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
   },
-  timerLabel: {
-    fontSize: 14,
-    color: '#6B7280',
-    marginBottom: 8,
-  },
-  timerText: {
-    fontSize: 48,
-    fontWeight: 'bold',
-    color: '#3B82F6',
-    fontVariant: ['tabular-nums'],
-  },
-  jobCard: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 20,
-    marginBottom: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  jobHeader: {
+  jobIdContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 16,
+    gap: 12,
   },
-  jobStatus: {
+  jobId: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#fff',
+  },
+  amountBadge: {
+    backgroundColor: '#ECFDF5',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 20,
+  },
+  amountText: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: '#10B981',
-    marginLeft: 12,
+    color: '#059669',
   },
-  divider: {
-    height: 1,
-    backgroundColor: '#E5E7EB',
-    marginBottom: 20,
+  card: {
+    backgroundColor: '#fff',
+    marginHorizontal: 16,
+    marginTop: 16,
+    padding: 16,
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
-  locationSection: {
-    marginBottom: 20,
-  },
-  locationRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-  },
-  iconContainer: {
-    width: 40,
-    alignItems: 'center',
-  },
-  routeLine: {
-    width: 2,
-    height: 24,
-    backgroundColor: '#D1D5DB',
-    marginLeft: 19,
-    marginVertical: 8,
-  },
-  locationDetails: {
-    flex: 1,
-    marginLeft: 12,
-  },
-  locationLabel: {
-    fontSize: 12,
-    color: '#9CA3AF',
-    marginBottom: 4,
-  },
-  locationValue: {
-    fontSize: 16,
+  cardTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
     color: '#1F2937',
-    fontWeight: '500',
+    marginBottom: 12,
   },
-  detailsSection: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    paddingTop: 16,
-    borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
-  },
-  detailItem: {
+  statusBadge: {
     flexDirection: 'row',
     alignItems: 'center',
+    backgroundColor: '#FEF3C7',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    gap: 8,
   },
-  detailText: {
-    marginLeft: 6,
-    fontSize: 14,
+  statusText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#92400E',
+  },
+  detailRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+    gap: 8,
+  },
+  detailLabel: {
+    flex: 1,
+    fontSize: 15,
     color: '#6B7280',
   },
-  completeButton: {
-    backgroundColor: '#10B981',
+  detailValue: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#1F2937',
+  },
+  addressContainer: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+  },
+  addressText: {
+    flex: 1,
+    fontSize: 15,
+    color: '#1F2937',
+    lineHeight: 22,
+  },
+  mlInfoCard: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: '#F5F3FF',
+    marginHorizontal: 16,
+    marginTop: 16,
+    padding: 16,
     borderRadius: 12,
-    padding: 18,
+    gap: 12,
+  },
+  mlInfoTextContainer: {
+    flex: 1,
+  },
+  mlInfoTitle: {
+    fontSize: 15,
+    fontWeight: 'bold',
+    color: '#6D28D9',
+    marginBottom: 6,
+  },
+  mlInfoText: {
+    fontSize: 13,
+    color: '#7C3AED',
+    lineHeight: 18,
+  },
+  buttonContainer: {
+    marginHorizontal: 16,
+    marginTop: 24,
+  },
+  completeButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 6,
-    elevation: 4,
+    backgroundColor: '#10B981',
+    paddingVertical: 16,
+    borderRadius: 12,
+    gap: 12,
   },
-  buttonDisabled: {
-    opacity: 0.6,
+  completeButtonDisabled: {
+    backgroundColor: '#9CA3AF',
   },
   completeButtonText: {
     color: '#fff',
     fontSize: 18,
     fontWeight: 'bold',
-    marginLeft: 12,
+  },
+  bottomSpacer: {
+    height: 32,
   },
 });
